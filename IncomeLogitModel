@@ -1,0 +1,75 @@
+library(tidyverse)
+library(dplyr)
+
+list.files(path = "../input")
+
+incomeData <- read.csv(file = '../input/adult-census-income/adult.csv')
+summary(incomeData)
+
+summary(incomeData$income)
+
+# Remove categories with high standard error
+X <- filter(incomeData, education != "Preschool" & education != "1st-4th" & marital.status != "Married-AF-spouse" & occupation != "Armed-Forces" & occupation != "Priv-house-serv")
+
+X$income_Y <- as.numeric(X$income == ">50K")
+
+# Dependent variable imbalance
+mean(X$income_Y)
+summary(X$race)
+
+# Logit model
+fit.logit <- glm(income_Y ~ education + sex + age + race +hours.per.week + marital.status + occupation, data = X, family = binomial(link = 'logit'))
+summary(fit.logit)
+
+
+# Marginal Effects Graphs
+perd.p1 <- predict(fit.logit, data.frame('education'= 'HS-grad','sex' = 'Male', 'age' = 37, 'marital.status' = 'Married-civ-spouse', 'hours.per.week' = 40, 'occupation' = 'Prof-specialty', 'race' = 'White'), type = 'response')
+perd.gender <- predict(fit.logit, newdata = data.frame('education'= 'HS-grad','sex' = 'Female', 'age' = 37, 'marital.status' = 'Married-civ-spouse', 'hours.per.week' = 40, 'occupation' = 'Prof-specialty', 'race' = 'White'), type = 'response')
+perd.education <- predict(fit.logit, newdata = data.frame('education'= 'Doctorate','sex' = 'Male', 'age' = 37, 'marital.status' = 'Married-civ-spouse', 'hours.per.week' = 40, 'occupation' = 'Prof-specialty', 'race' = 'White'), type = 'response')
+perd.age <- predict(fit.logit, newdata = data.frame('education'= 'HS-grad','sex' = 'Male', 'age' = 48, 'marital.status' = 'Married-civ-spouse', 'hours.per.week' = 40, 'occupation' = 'Prof-specialty', 'race' = 'White'), type = 'response')
+perd.occ <- predict(fit.logit, newdata = data.frame('education'= 'HS-grad','sex' = 'Male', 'age' = 37, 'marital.status' = 'Married-civ-spouse', 'hours.per.week' = 40, 'occupation' = 'Exec-managerial', 'race' = 'White'), type = 'response')
+perd.hours <- predict(fit.logit, newdata = data.frame('education'= 'HS-grad','sex' = 'Male', 'age' = 37, 'marital.status' = 'Married-civ-spouse', 'hours.per.week' = 45, 'occupation' = 'Prof-specialty', 'race' = 'White'), type = 'response')
+perd.marry <- predict(fit.logit, newdata = data.frame('education'= 'HS-grad','sex' = 'Male', 'age' = 37, 'marital.status' = 'Never-married', 'hours.per.week' = 40, 'occupation' = 'Prof-specialty', 'race' = 'White'), type = 'response')
+perd.race <- predict(fit.logit, data.frame('education'= 'HS-grad','sex' = 'Male', 'age' = 37, 'marital.status' = 'Married-civ-spouse', 'hours.per.week' = 40, 'occupation' = 'Prof-specialty', 'race' = 'Black'), type = 'response')
+
+pred <- c(perd.p1,perd.gender, perd.education, perd.age, perd.occ, perd.hours, perd.marry, perd.race)
+print(perd.p1)
+print(perd.gender)
+print(perd.education)
+print(perd.age)
+print(perd.occ)
+print(perd.hours)
+print(perd.marry)
+print(perd.race)
+plot(pred, xaxt = "n", xlab = "Feature Changed")
+axis(1,at=1:8, labels = c("Control", "Female", "Doctorate", "age 48", "ExecServ", "45hours", "Nevrmarry","Race"))
+
+
+library(sjPlot)
+plot_model(fit.logit, type = "pred", terms = "age")
+plot_model(fit.logit, type = "pred", terms = "hours.per.week")
+plot_model(fit.logit, type = "pred",axis.labels = "", terms = "occupation")
+plot_model(fit.logit, type = "pred",axis.labels = "", terms = "marital.status")
+plot_model(fit.logit, type = "pred",axis.labels = "", terms = "education")
+plot_model(fit.logit, type = "pred", terms = "sex")
+plot_model(fit.logit, type = "pred", terms = "race")
+
+# Model Evaluation
+pred <- predict(fit.logit,type = "response")
+predicted.classes <- ifelse(pred > 0.5, 1, 0)
+
+ct.correct <- length(which(predicted.classes == X$income_Y))
+count.r2 <- ct.correct/dim(incomeData)[1]
+print(count.r2)
+
+ll <- logLik(fit.logit)
+fit.null <- glm(income_Y ~ 1, data = X, family = binomial(link = 'logit'))
+ll.null <- logLik(fit.null)
+print(mean(predict(fit.null, type = "response")))
+
+mcf.r2 <- c(1 - ll/ll.null)
+print(mcf.r2)
+
+ts <- c(2*(ll - ll.null))
+p.lr <- pchisq(ts,9,lower.tail=FALSE)
+print(p.lr)
